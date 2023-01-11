@@ -37,16 +37,16 @@ fn parse_args(argv:Vec<String>) -> Result<(i32, i16, String, String), i16>{
         Ok(m) => m,
         Err(_) => { return Err(1); }
     };
+    if matches.opt_present("r") {
+        direction = 0;
+        filename = String::from("stdout");
+        port = 8086;
+    };
     if matches.opt_present("p") {
         port = match matches.opt_str("p").expect("Unexpected error").parse::<i32>() {
             Ok(p) => p,
             Err(_) => { return Err(1); }
         }
-    };
-    if matches.opt_present("r") {
-        direction = 0;
-        filename = String::from("stdout");
-        port = 8086;
     };
     if matches.opt_present("f"){
         filename = matches.opt_str("f").expect("Unexpected Error");
@@ -80,7 +80,7 @@ fn build_send_stream(port:i32, addrstr:String) -> Result<TcpStream, i16>{
     }; */
     return match builder.connect(addrstr) { //builder.to_tcp_stream() {
         Ok(s) => Ok(s),
-        Err(_) => Err(4)
+        Err(m) => { eprint!("{}", m.to_string()); Err(4) }
     };
 }
 
@@ -130,7 +130,7 @@ fn build_recv_stream(port:i32) -> Result<TcpStream, i16>{
         Ok(s) => s,
         Err(_)=> {return Err(2); }
     };
-    let builder = builder.bind(("127.0.0.1", port as u16)).expect("Unexpected Error with binding");
+    let builder = builder.bind(("0.0.0.0", port as u16)).expect("Unexpected Error with binding");
     let listener = match builder.listen(10) {
         Ok(s) => s,
         Err(_) => { return Err(4); }
@@ -171,6 +171,9 @@ fn main() -> Result<(), i16>{
         Ok(s) => s,
         Err(_) => {panic!("{}", ERRSTR);}
     };
+
+    println!("{}", port);
+    println!("{}", addrstring);
 
     if direction == 1 {
         return send(port, filename, addrstring); 
