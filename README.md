@@ -1,11 +1,12 @@
 # dftp
 Direct File Transfer Protocol
 
-Except that there is no protool and The file just gets shoved through a streaming socket.
+This is for when you need to quickly transfer a file between two devices over the network.
 
-Wrote this out of pure spite because i was infuriated by the fact that it didn't exist already.
+It is not secure (yet) but easier to use than ssh and sftp since it's a one-shot program and doesnt require configuring a server.
+Moreover it has a very simple and understandable protocol.
 
-Don't act like you didn't want it. You don't always want ssl and netcat can be very slow when transfering files(for me it was).
+It's just like how you may use netcat to transfer files however it's specialized for this purpose and is faster due to compression.
 
 ## Installation
 This is a Cargo project. simply:
@@ -23,16 +24,21 @@ to install it locally
 ## Usage
 First, On the receiving end type:
 ``` bash
-dftp -r [-p {listen_port_numer}=8086] [-f {output_file_name}]
+dftp -r [-p {listen_port_numer}=8086] [-f {output_file_name}=stdout]
 ```
 
 then on the sending end type:
 ``` bash 
-dftp {ip_address_of_recieving_end}[:recieve_port=8086] [-p {bind_port_number}=any] [-f {input_file_name}]
+dftp {ip_address_of_recieving_end}[:recieve_port=8086] [-p {bind_port_number}=any] [-f {input_file_name}=stdin] [-x]
 ```
-and watch this baby go.
+
+the `-x` flag tells the program to use xz compression over the network.
 
 ## Notes
-Explanatory error messages and usage hints are yet to come.
+~~Explanatory error messages and usage hints are yet to come.~~ DONE.
+Support for transfering multiple files is the next task.
 
 Default behavior is reading/writing from/to stdin/stdout for the sending/receiving end. Unless -f is specified.
+
+Compression is disabled by default. use `-x` on the sending side to enable it.
+
