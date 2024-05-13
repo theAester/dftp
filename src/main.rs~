@@ -9,7 +9,7 @@
  ************************theAester**************************
  **********************************************************/
 
-use std::io::{Write, Read, ErrorKind::ConnectionReset};
+use std::io::{Write, Read};
 use std::env;
 use std::process::exit;
 

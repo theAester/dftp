@@ -9,4 +9,4 @@ authors = ["theAester"]
 [dependencies]
 getopts = "0.2"
 net2 = "0.2"
-xz2="0.1.7"
+
