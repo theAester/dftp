@@ -1,6 +1,13 @@
-use std::io::{Read, Write};
+use std::io::{Write, Read, ErrorKind::ConnectionReset};
 use std::net::{TcpStream};
 use std::io::ErrorKind::{WouldBlock, TimedOut};
+use std::process::exit;
+
+use crate::network::{build_send_stream, build_recv_stream};
+use crate::files::{build_file_reader, build_file_writer};
+use crate::compress::{wrap_compressor, wrap_decompressor};
+
+pub const TRANSFER_BUFF_SIZE: usize = 262144; // 256 * 1024 bytes
 
 pub const COMPAT_NUMBER: u8         = 1;
 
@@ -8,7 +15,7 @@ pub const SIMPLE_MSG_SENDER_ID: u8  = 0;
 pub const SIMPLE_MSG_RECVER_ID: u8  = 1;
 pub const SIMPLE_MSG_HS_ACK: u8     = 0b11111001;
 pub const SIMPLE_MSG_PN_ACC: u8     = 0b00001001;
-pub const SIMPLE_MSG_PN_DEN: u8     = 0b00001000;
+pub const SIMPLE_MSG_PN_DEC: u8     = 0b00001000;
 
 pub const PT_FLAG_COMPRESS: u8      = 1;
 
@@ -44,7 +51,7 @@ impl TcpShovable for Simple {
             SIMPLE_MSG_RECVER_ID | 
             SIMPLE_MSG_HS_ACK    |
             SIMPLE_MSG_PN_ACC    |
-            SIMPLE_MSG_PN_DEN => {},
+            SIMPLE_MSG_PN_DEC => {},
             _ => { return Err("Invalid value for simple message encountered while packing".to_string()); }
         }
         buf[0] = self.content;
@@ -75,7 +82,7 @@ impl TcpShovable for Simple {
             SIMPLE_MSG_RECVER_ID | 
             SIMPLE_MSG_HS_ACK    |
             SIMPLE_MSG_PN_ACC    |
-            SIMPLE_MSG_PN_DEN => {},
+            SIMPLE_MSG_PN_DEC => {},
             _ => { return Err("Invalid value for simple message encountered while unpacking".to_string()); }
         }
         self.content = buf[0];
@@ -289,6 +296,135 @@ pub fn handshake_recv(peer: &mut TcpStream) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn protocol_adjust_send(mut peer: TcpStream, compress: bool) -> Result<Box<dyn Write>, String>{
+    // for now compression is the only protocol adjustment
+
+    // craft a protocol table message and send it
+    let mut message = ProtocolTable::new();
+    message.compressed = compress;
+    message.shove(&mut peer)?;
+
+    // wait for a negotiation response
+    let mut message = Simple::new();
+    message.pull(&mut peer)?;
+    if message.content == SIMPLE_MSG_PN_DEC {
+        return Err("Protocol negotiation failed: peer declined.\nOne of you needs to update their dftp.".to_string());
+    }
+    if message.content != SIMPLE_MSG_PN_ACC {
+        return Err("Malfunction 4".to_string());
+    }
+
+    // here the peer has accepted out protocol negotiation
+    // time to upgrade protocol    
+    
+    let writer: Box<dyn Write> = Box::new(peer);
+    let writer = if compress {
+        wrap_compressor(writer)
+    } else { writer };
+
+    // more protocol upgrades here
+    
+    Ok(Box::new(writer))
+}
+
+fn protocol_adjust_recv(mut peer: TcpStream) -> Result<Box<dyn Read>, String>{
+    // wait for a protocol table
+    let mut message = ProtocolTable::new();
+    match message.pull(&mut peer) {
+        Ok(_) => {
+            let mut decl = Simple::new();
+            decl.content = SIMPLE_MSG_PN_ACC;
+            decl.shove(&mut peer)?;
+        },
+        Err(m) => {
+            // protocol request is fucked. send decline message
+            let mut decl = Simple::new();
+            decl.content = SIMPLE_MSG_PN_DEC;
+            decl.shove(&mut peer)?;
+            return Err(m);
+        }
+    }
+
+    // if we're here it means that protocl negotiation was successful.
+    // time to upgrade protocol
+
+    let reader: Box<dyn Read> = Box::new(peer);
+    let reader = if message.compressed {
+        wrap_decompressor(reader)
+    } else { reader };
+
+    // more protocol upgrades here
+    
+    Ok(Box::new(reader))
+}
+
+
+pub fn send(port:i32, filename:String, addrstr:String, compress: bool){
+    let mut sender = match build_send_stream(port, addrstr) {
+        Ok(s) => s,
+        Err(m) => { eprintln!("Error while starting stream:\n  {}", m); exit(1); }
+    };
+    match handshake_send(&mut sender) {
+        Ok(_) => {},
+        Err(s) => { eprintln!("Handshake failed: {}", s); exit(1); }
+    };
+    let mut sender = match protocol_adjust_send(sender, compress) {
+        Ok(s) => s,
+        Err(m) => { eprintln!("{}", m); exit(1); }
+    };
+    let mut reader = match build_file_reader(&filename){
+        Ok(r) => r,
+        Err(m) => { eprintln!("Error while reading file:\n  {}", m);exit(1); }
+    };
+    let mut bufflen:usize;
+    let mut buff:[u8; TRANSFER_BUFF_SIZE] = [0; TRANSFER_BUFF_SIZE];
+    loop{
+        bufflen = reader.read(&mut buff).expect("Unexpected Error while reading from file. Aborting.");
+        if bufflen == 0 { break; }
+        sender.write_all(&buff[0..bufflen]).expect("Unexpected network error. Aborting.");
+    }
+}
+
+pub fn recv(port:i32, filename:String, _compress: bool) {
+    let mut recvr = match build_recv_stream(port) {
+        Ok(s) => s,
+        Err(m) => { eprintln!("Error while starting stream:\n  {}", m); exit(1); }
+    };
+    match handshake_recv(&mut recvr) {
+        Ok(_) => {},
+        Err(s) => { eprintln!("Handshake failed: {}", s); exit(1); }
+    };
+    let mut recvr = match protocol_adjust_recv(recvr) {
+        Ok(s) => s,
+        Err(m) => { eprintln!("{}", m); exit(1); }
+    };
+    let mut writer = match build_file_writer(&filename){
+        Ok(r) => r,
+        Err(m) => { eprintln!("Error while writing to file:\n  {}", m); exit(1); }
+    };
+    let mut bufflen:usize;
+    let mut buff:[u8; TRANSFER_BUFF_SIZE] = [0; TRANSFER_BUFF_SIZE];
+    loop{
+        bufflen = match recvr.read(&mut buff) {
+            Ok(n) => n,
+            Err(m) => {
+                match m.kind() {
+                    ConnectionReset => {
+                        eprintln!("Connection closed by peer");
+                        break;
+                    },
+                    _ => {
+                        panic!("{}", m);
+                    },
+                }
+            }
+        };
+        if bufflen == 0 { break; }
+        writer.write_all(&buff[0..bufflen]).expect("Unexpected network error. Aborting.");
+        if filename == "stdout" { writer.flush().expect("wtf?"); }
+    }
 }
 
 

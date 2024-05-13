@@ -1,12 +1,12 @@
 extern crate net2;
 
-//use std::net::TcpStream;
+use std::net::TcpStream;
 use net2::TcpBuilder;
 use std::io::{Read, Write};
 
 use crate::protocol::{handshake_send, handshake_recv};
 
-pub fn build_send_stream(port:i32, addrstr:String, _compress: bool) -> Result<Box<dyn Write>, String>{
+pub fn build_send_stream(port:i32, addrstr:String) -> Result<TcpStream, String>{
     let builder = match TcpBuilder::new_v4(){
         Ok(s) => s,
         Err(m)=> {return Err(m.to_string()); }
@@ -26,16 +26,10 @@ pub fn build_send_stream(port:i32, addrstr:String, _compress: bool) -> Result<Bo
         Ok(s) => s,
         Err(m) => { return Err(format!("connection failed: {}", m.to_string())); }
     };
-    match handshake_send(&mut stream) {
-        Ok(_) => {},
-        Err(s) => { return Err(format!("Handshake failed: {}", s)); }
-    };
-    // protocol adjustment
-    let stream = Box::new(stream);
     return Ok(stream);
 }
 
-pub fn build_recv_stream(port:i32) -> Result<Box<dyn Read>, String>{
+pub fn build_recv_stream(port:i32) -> Result<TcpStream, String>{
     let builder = match TcpBuilder::new_v4(){
         Ok(s) => s,
         Err(m)=> {return Err(m.to_string()); }
@@ -52,12 +46,6 @@ pub fn build_recv_stream(port:i32) -> Result<Box<dyn Read>, String>{
         Ok(s) => s,
         Err(m) => { return Err(format!("Cannot accept peer: {}", m.to_string())); }
     };
-    match handshake_recv(&mut recvr) {
-        Ok(_) => {},
-        Err(s) => { return Err(format!("Handshake failed: {}", s)); }
-    };
-    // protocol adjustment
-    let recvr = Box::new(recvr);
     Ok(recvr)
 }
 
