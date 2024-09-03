@@ -3,6 +3,7 @@ use std::iter::Flatten;
 use std::net::{TcpStream};
 use std::io::ErrorKind::{WouldBlock, TimedOut, BrokenPipe};
 use std::fs::File;
+use std::os::windows::fs::MetadataExt;
 use std::path::Path;
 use std::process::exit;
 use std::time::SystemTime;
@@ -419,23 +420,28 @@ fn protocol_adjust_recv(mut peer: TcpStream) -> Result<(Box<dyn Read>,
     Ok((Box::new(reader), fileheader, message))
 }
 
+fn compute_hash(file: &mut File) -> [u8; 32] {
+    // Hasing is premature. Need better cmd coverage since hashing adds a lot of latency
+    //let mut sha = Sha256::new();
+    //std::io::copy(file, &mut sha).expect("Should be able to hash anything");
+    //let hash = sha.finalize();
+    //assert!(hash.len() == 32usize);
+    //let mut hashbuf = [0u8; 32];
+    //for i in 0..32{
+    //    hashbuf[i] = hash[i];
+    //}
+    return [0u8; 32];
+}
+
 fn send_file_header(peer: &mut TcpStream, filename: &String) -> Result<(), Error>{
     let mut header = FileHeader::default();
     header.file_type = FH_TYPE_FILE; // dir sending is not available for now...
     header.name = String::from(Path::new(filename).file_name().unwrap().to_str().unwrap());
-    
     let mut file = File::open(filename)?;
     let size = file.metadata()?.len() as u32;
     header.length = size;
-    let mut sha = Sha256::new();
-    std::io::copy(&mut file, &mut sha)?;
-    let hash = sha.finalize();
+    header.hash = compute_hash(&mut file);
     assert!(Sha256::output_size() == 32usize);
-    assert!(hash.len() == 32usize);
-    for i in 0..32{
-        header.hash[i] = hash[i];
-    }
-
     header.shove(peer).unwrap();
     Ok(())
 }
@@ -457,6 +463,15 @@ fn stringify_hash(hash: &[u8]) -> String {
         write!(&mut s, "{:02x}", hash[i]).expect("should be able to write to string");
     }
     return s;
+}
+
+fn print_file_info_send(filename: &String, compressed: bool){
+    if filename == "stdin" {return}; // dont fuck up the output!!
+    println!("Sending file: {} [{:}]", Path::new(filename).file_name().unwrap().to_str().unwrap(), stringify_hash(&compute_hash(File::open(filename).as_mut().unwrap())));
+    if compressed {
+        println!("Compressed stream");
+    }
+    println!();
 }
 
 fn print_file_info(filename: &String, fileheader: &Option<FileHeader>, compressed: bool){
@@ -489,12 +504,44 @@ pub fn send(port:i32, filename:String, addrstr:String, compress: bool){
         Ok(r) => r,
         Err(m) => { eprintln!("Error while reading file:\n  {}", m);exit(1); }
     };
-    let mut bufflen:usize;
+    let mut bufflen:usize = 0;
     let mut buff:[u8; TRANSFER_BUFF_SIZE] = [0; TRANSFER_BUFF_SIZE];
+    print_file_info_send(&filename, compress);
+    let mut total: u32 = 0;
+    let mut counter = 0;
+    let mut bufflen_acc = 0;
+    let mut now = SystemTime::now();
+    let length = File::open(&filename).unwrap().metadata().unwrap().len();
     loop{
+        total += bufflen as u32;
         bufflen = reader.read(&mut buff).expect("Unexpected Error while reading from file. Aborting.");
         if bufflen == 0 { break; }
-        sender.write_all(&buff[0..bufflen]).expect("Unexpected network error. Aborting.");
+        if counter == 0 {
+            if filename != "stdin" {
+                let micros = now.elapsed().unwrap().as_micros() as u64;
+                let speed = (bufflen_acc * 1_000_000) as f64 / micros as f64;
+                let speed = speed / 1024f64;
+                print_status(speed, length as f32 / (1024 * 1024) as f32, total as f32 / (1024 * 1024) as f32);
+                bufflen_acc = 0;
+            now = SystemTime::now();
+
+            }
+        }
+        match sender.write_all(&buff[0..bufflen]) {
+            Err(e) => {
+                match e.kind() {
+                    WouldBlock | TimedOut | ConnectionReset => {
+                        eprintln!("The sender has closed the connection. Aborting transfer.");
+                        break;
+                    }
+                    _ => { panic!("Unexpected network error. Aborting."); },
+                }
+            },
+            Ok(_)=>{}
+        };
+        bufflen_acc += bufflen;
+        counter += 1;
+        if counter == 80 { counter = 0; }
     }
 }
 
