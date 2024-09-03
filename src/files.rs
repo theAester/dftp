@@ -2,6 +2,10 @@ use std::io;
 use std::io::{Write, BufReader, BufWriter, BufRead};
 use std::fs::File;
 
+pub fn defer_kind(filename: &String) -> bool {
+    return !(filename == "stdin");
+}
+
 pub fn build_file_reader(filename:&String) -> Result<Box<dyn BufRead>, String>{
     if filename == "stdin" {
         return Ok(Box::new(BufReader::new(io::stdin())));
