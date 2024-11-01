@@ -5,6 +5,7 @@ use std::process::exit;
 
 pub const DIR_SEND: i16 = 1;
 pub const DIR_RECV: i16 = 0;
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn parse_args(argv:Vec<String>) -> Result<(i32, i16, String, String, bool), String>{
     let mut opts = Options::new();
@@ -18,6 +19,7 @@ pub fn parse_args(argv:Vec<String>) -> Result<(i32, i16, String, String, bool), 
     opts.opt("p", "port", "use this port for self(default: 8086)", "port", HasArg::Yes, Occur::Optional);
     opts.opt("f", "file", "use this file instead of stdin/out", "file", HasArg::Yes, Occur::Optional);
     opts.opt("h", "help", "display this help message", "help", HasArg::No, Occur::Optional);
+    opts.opt("v", "version", "displays dftp's build version", "help", HasArg::No, Occur::Optional);
     opts.opt("x",  "compress", "compressed transportation. must be specified on sender side.", "compress", HasArg::No, Occur::Optional);
 
     let appname = &argv[0];
@@ -29,6 +31,10 @@ pub fn parse_args(argv:Vec<String>) -> Result<(i32, i16, String, String, bool), 
 
     if matches.opt_present("h") {
         print_help(appname, opts);
+        exit(0);
+    }
+    if matches.opt_present("v") {
+        println!("{} v{}", appname, APP_VERSION);
         exit(0);
     }
     if matches.opt_present("r") {
@@ -82,7 +88,10 @@ pub fn parse_args(argv:Vec<String>) -> Result<(i32, i16, String, String, bool), 
 fn print_help(appname: &str, opts: Options){
     let brief = format!("Usage: {} [OPTIONS] [ADDR]", appname);
     let usage = opts.usage(&brief);
-    println!("{}\nADDR =\t<IPv4 addr>:<port>\n", usage);
+    println!("{} v{}\n{}\nADDR =\t<IPv4 addr>:<port>\n", 
+        appname, 
+        APP_VERSION,
+        usage);
 }
 
 fn is_addr_string_valid(addrstring: &String) -> bool {
