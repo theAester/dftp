@@ -1,9 +1,7 @@
 use std::io::{Write, Read, ErrorKind::ConnectionReset, Error};
-use std::iter::Flatten;
 use std::net::{TcpStream};
 use std::io::ErrorKind::{WouldBlock, TimedOut, BrokenPipe};
 use std::fs::File;
-use std::os::windows::fs::MetadataExt;
 use std::path::Path;
 use std::process::exit;
 use std::time::SystemTime;

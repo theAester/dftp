@@ -2,9 +2,6 @@ extern crate net2;
 
 use std::net::TcpStream;
 use net2::TcpBuilder;
-use std::io::{Read, Write};
-
-use crate::protocol::{handshake_send, handshake_recv};
 
 pub fn build_send_stream(port:i32, addrstr:String) -> Result<TcpStream, String>{
     let builder = match TcpBuilder::new_v4(){
@@ -22,7 +19,7 @@ pub fn build_send_stream(port:i32, addrstr:String) -> Result<TcpStream, String>{
         Ok(s) => s,
         Err(_) => { return Err(3); }
     }; */
-    let mut stream = match builder.connect(addrstr) { //builder.to_tcp_stream() {
+    let stream = match builder.connect(addrstr) { //builder.to_tcp_stream() {
         Ok(s) => s,
         Err(m) => { return Err(format!("connection failed: {}", m.to_string())); }
     };
@@ -42,7 +39,7 @@ pub fn build_recv_stream(port:i32) -> Result<TcpStream, String>{
         Ok(s) => s,
         Err(m) => { return Err(format!("Listening on port {} failed: {}", port, m.to_string())); }
     };
-    let (mut recvr, _) = match listener.accept() {
+    let (recvr, _) = match listener.accept() {
         Ok(s) => s,
         Err(m) => { return Err(format!("Cannot accept peer: {}", m.to_string())); }
     };
