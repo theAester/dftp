@@ -45,7 +45,7 @@ struct ProtocolTable{
 }
 
 struct FileHeader{
-    length: u32, // file size not name length!
+    length: u64, // file size not name length!
     file_type: u8,
     name: String,
     hash: [u8; 32],
@@ -155,25 +155,29 @@ impl TcpShovable for ProtocolTable{
 impl TcpShovable for FileHeader{
     fn shove(&self, stream: &mut TcpStream) -> Result<usize, String> {
         let name = &self.name;
-        let buflen = 4 + 1 + 4 + 32 + name.len();
+        let buflen = 8 + 1 + 4 + 32 + name.len();
         let mut buf: Vec<u8> = vec![0; buflen];
         let len = self.length;
         // big endian
-        buf[0] = ((len >> 24)       ) as u8;
-        buf[1] = ((len >> 16) & 0xff) as u8;
-        buf[3] = ((len >> 8) & 0xff) as u8;
-        buf[3] = ((len     ) & 0xff) as u8;
+        buf[0] = ((len >> 56)       ) as u8;
+        buf[1] = ((len >> 48) & 0xff) as u8;
+        buf[2] = ((len >> 40) & 0xff) as u8;
+        buf[3] = ((len >> 32) & 0xff) as u8;
+        buf[4] = ((len >> 24) & 0xff) as u8;
+        buf[5] = ((len >> 16) & 0xff) as u8;
+        buf[6] = ((len >> 8 ) & 0xff) as u8;
+        buf[7] = ((len      ) & 0xff) as u8;
 
-        buf[4] = self.file_type;
+        buf[8] = self.file_type;
         // get the string, write the len first 
         // and then the string itself.
         let name = name.as_bytes();
         let len = name.len();
-        buf[5] = ((len >> 24)       ) as u8;
-        buf[6] = ((len >> 16) & 0xff) as u8;
-        buf[7] = ((len >> 8) & 0xff) as u8;
-        buf[8] = ((len     ) & 0xff) as u8;
-        let mut i: usize = 9;
+        buf[9] = ((len >> 24)       ) as u8;
+        buf[10] = ((len >> 16) & 0xff) as u8;
+        buf[11] = ((len >> 8) & 0xff) as u8;
+        buf[12] = ((len     ) & 0xff) as u8;
+        let mut i: usize = 13;
         for b in name {
             buf[i] = *b;
             i += 1;
@@ -197,7 +201,7 @@ impl TcpShovable for FileHeader{
     }
     
     fn pull(&mut self, stream: &mut TcpStream) -> Result<usize, String> {
-        let mut buf:[u8; 9] = [0; 9];
+        let mut buf:[u8; 13] = [0; 13];
         match stream.read_exact(&mut buf){
             Err(e) => {
                 match e.kind() {
@@ -207,23 +211,27 @@ impl TcpShovable for FileHeader{
             },
             Ok(_) => {},
         }
-        let mut len: u32 = 0;
-        len <<= 8; len += buf[0] as u32;
-        len <<= 8; len += buf[1] as u32;
-        len <<= 8; len += buf[2] as u32;
-        len <<= 8; len += buf[3] as u32;
+        let mut len: u64 = 0;
+        len <<= 8; len += buf[0] as u64;
+        len <<= 8; len += buf[1] as u64;
+        len <<= 8; len += buf[2] as u64;
+        len <<= 8; len += buf[3] as u64;
+        len <<= 8; len += buf[4] as u64;
+        len <<= 8; len += buf[5] as u64;
+        len <<= 8; len += buf[6] as u64;
+        len <<= 8; len += buf[7] as u64;
         self.length = len;
-        match buf[4] {
+        match buf[8] {
             FH_TYPE_FILE | 
             FH_TYPE_DIR => {},
-            _ => { return Err(format!("Error when unpacking FH, invalid file type {}", buf[4])); }
+            _ => { return Err(format!("Error when unpacking FH, invalid file type {}", buf[8])); }
         }
-        self.file_type = buf[4];
+        self.file_type = buf[8];
         let mut len: u32 = 0;
-        len <<= 8; len += buf[5] as u32;
-        len <<= 8; len += buf[6] as u32;
-        len <<= 8; len += buf[7] as u32;
-        len <<= 8; len += buf[8] as u32;
+        len <<= 8; len += buf[9] as u32;
+        len <<= 8; len += buf[10] as u32;
+        len <<= 8; len += buf[11] as u32;
+        len <<= 8; len += buf[12] as u32;
         let len = len as usize;
         println!("size: {}", len);
         let mut buf2: Vec<u8> = vec![0u8; len];
@@ -436,7 +444,7 @@ fn send_file_header(peer: &mut TcpStream, filename: &String) -> Result<(), Error
     header.file_type = FH_TYPE_FILE; // dir sending is not available for now...
     header.name = String::from(Path::new(filename).file_name().unwrap().to_str().unwrap());
     let mut file = File::open(filename)?;
-    let size = file.metadata()?.len() as u32;
+    let size = file.metadata()?.len() as u64;
     header.length = size;
     header.hash = compute_hash(&mut file);
     assert!(Sha256::output_size() == 32usize);
