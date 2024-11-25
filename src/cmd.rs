@@ -39,7 +39,7 @@ pub fn parse_args(argv:Vec<String>) -> Result<(i32, i16, String, String, bool), 
     }
     if matches.opt_present("r") {
         direction = DIR_RECV;
-        filename = String::from("default");
+        //filename = String::from("default");
         port = 8086;
     }
     if matches.opt_present("p") {

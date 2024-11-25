@@ -18,7 +18,7 @@ pub fn build_file_reader(filename:&String) -> Result<Box<dyn BufRead>, String>{
 }
 
 pub fn build_file_writer(filename:&String) -> Result<Box<dyn Write>, String>{
-    if filename == "stdout" {
+    if filename == "stdin" {
         return Ok(Box::new(BufWriter::new(io::stdout())));
     }
     let file = match File::create(filename) {

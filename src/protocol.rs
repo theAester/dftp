@@ -233,7 +233,6 @@ impl TcpShovable for FileHeader{
         len <<= 8; len += buf[11] as u32;
         len <<= 8; len += buf[12] as u32;
         let len = len as usize;
-        println!("size: {}", len);
         let mut buf2: Vec<u8> = vec![0u8; len];
         match stream.read_exact(&mut buf2[..]) {
         Err(e) => {
@@ -442,7 +441,7 @@ fn compute_hash(file: &mut File) -> [u8; 32] {
 fn send_file_header(peer: &mut TcpStream, filename: &String) -> Result<(), Error>{
     let mut header = FileHeader::default();
     header.file_type = FH_TYPE_FILE; // dir sending is not available for now...
-    header.name = String::from(Path::new(filename).file_name().unwrap().to_str().unwrap());
+    header.name = String::from(if filename.as_str() == "stdin" { "stdin" } else { Path::new(filename).file_name().unwrap().to_str().unwrap() });
     let mut file = File::open(filename)?;
     let size = file.metadata()?.len() as u64;
     header.length = size;
@@ -465,9 +464,9 @@ fn recv_file_header(peer: &mut TcpStream) -> Result<FileHeader, Error>{
 
 fn stringify_hash(hash: &[u8]) -> String {
     let mut s = String::new();
-    for i in 0..32 {
-        write!(&mut s, "{:02x}", hash[i]).expect("should be able to write to string");
-    }
+    //for i in 0..32 {
+        //write!(&mut s, "{:02x}", hash[i]).expect("should be able to write to string");
+    //}
     return s;
 }
 
@@ -517,7 +516,7 @@ pub fn send(port:i32, filename:String, addrstr:String, compress: bool){
     let mut counter = 0;
     let mut bufflen_acc = 0;
     let mut now = SystemTime::now();
-    let length = File::open(&filename).unwrap().metadata().unwrap().len();
+    let length = if filename == "stdin" { 0 } else { File::open(&filename).unwrap().metadata().unwrap().len() };
     loop{
         total += bufflen as u32;
         bufflen = reader.read(&mut buff).expect("Unexpected Error while reading from file. Aborting.");
@@ -565,7 +564,7 @@ pub fn recv(port:i32, filename:String, _compress: bool) {
         Err(m) => { eprintln!("{}", m); exit(1); }
     };
     let mut filename = filename;
-    if fileheader.is_some() && filename == "default" {
+    if fileheader.is_some() && filename == "stdin" {
         filename = fileheader.as_ref().unwrap().name.clone();
     }
     let mut writer = match build_file_writer(&filename){
@@ -608,7 +607,7 @@ pub fn recv(port:i32, filename:String, _compress: bool) {
             }
         }
         writer.write_all(&buff[0..bufflen]).expect("Unexpected network error. Aborting.");
-        if filename == "stdout" { writer.flush().expect("wtf?"); }
+        if filename == "stdin" { writer.flush().expect("wtf?"); }
         bufflen_acc += bufflen;
         counter += 1;
         if counter == 80 { counter = 0; }
