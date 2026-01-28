@@ -17,7 +17,7 @@ use crate::files::{
 };
 use crate::compress::{wrap_compressor, wrap_decompressor};
 
-pub const TRANSFER_BUFF_SIZE: usize = 262144; // 256 * 1024 bytes
+pub const TRANSFER_BUFF_SIZE: usize = 131072;//262144; // 256 * 1024 bytes
 
 pub const COMPAT_NUMBER: u8         = 2;
 
@@ -379,7 +379,7 @@ fn protocol_adjust_send(mut peer: TcpStream, filename: &String, compress: bool) 
 
     // more protocol upgrades here
     
-    Ok(Box::new(writer))
+    Ok(writer)
 }
 
 fn protocol_adjust_recv(mut peer: TcpStream) -> Result<(Box<dyn Read>,
@@ -422,7 +422,7 @@ fn protocol_adjust_recv(mut peer: TcpStream) -> Result<(Box<dyn Read>,
 
     // more protocol upgrades here
     
-    Ok((Box::new(reader), fileheader, message))
+    Ok((reader, fileheader, message))
 }
 
 fn compute_hash(file: &mut File) -> [u8; 32] {
