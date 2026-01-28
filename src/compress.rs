@@ -11,7 +11,7 @@ use flate2::Compression;
 
 pub fn wrap_compressor(writer: Box<dyn Write>) -> Box<dyn Write> {
     //Box::new(XzEncoder::new(writer, 3))
-    Box::new(DeflateEncoder::new(writer, Compression::default()))
+    Box::new(DeflateEncoder::new(writer, Compression::best()))
 }
 
 pub fn wrap_decompressor(reader: Box<dyn Read>) -> Box<dyn Read> {
