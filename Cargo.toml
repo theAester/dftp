@@ -9,5 +9,6 @@ authors = ["theAester"]
 [dependencies]
 getopts = "0.2"
 net2 = "0.2"
-xz2="0.1.7"
+#xz2="0.1.7"
+flate2="1.1.8"
 sha2="*"
